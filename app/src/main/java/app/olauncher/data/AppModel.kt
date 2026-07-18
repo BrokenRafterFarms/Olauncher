@@ -38,6 +38,16 @@ sealed class AppModel : Comparable<AppModel> {
         override val isNew: Boolean = false
     }
 
+    data class FolderHeader(
+        override val appLabel: String,
+        val isExpanded: Boolean = false,
+        override val key: CollationKey? = null,
+        override val user: UserHandle = android.os.Process.myUserHandle(),
+    ) : AppModel() {
+        override val appPackage: String = ""
+        override val isNew: Boolean = false
+    }
+
     override fun compareTo(other: AppModel): Int = when {
         key != null && other.key != null -> key!!.compareTo(other.key)
         else -> appLabel.compareTo(other.appLabel, true)

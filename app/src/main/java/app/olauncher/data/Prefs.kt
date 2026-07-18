@@ -42,6 +42,8 @@ class Prefs(context: Context) {
     private val SCREEN_TIME_LAST_UPDATED = "SCREEN_TIME_LAST_UPDATED"
     private val LAUNCHER_RESTART_TIMESTAMP = "LAUNCHER_RECREATE_TIMESTAMP"
     private val SHOWN_ON_DAY_OF_YEAR = "SHOWN_ON_DAY_OF_YEAR"
+    private val FOLDERS = "FOLDERS"
+    private val EXPANDED_FOLDERS = "EXPANDED_FOLDERS"
     // Home button for recents feature disabled
     // private val HOME_BUTTON_SHOW_RECENTS = "HOME_BUTTON_SHOW_RECENTS"
 
@@ -236,6 +238,14 @@ class Prefs(context: Context) {
     var toShowHintCounter: Int
         get() = prefs.getInt(SHOW_HINT_COUNTER, 1)
         set(value) = prefs.edit { putInt(SHOW_HINT_COUNTER, value).apply() }
+
+    var folders: MutableSet<String>
+        get() = prefs.getStringSet(FOLDERS, mutableSetOf()) as MutableSet<String>
+        set(value) = prefs.edit { putStringSet(FOLDERS, value).apply() }
+
+    var expandedFolders: MutableSet<String>
+        get() = prefs.getStringSet(EXPANDED_FOLDERS, mutableSetOf()) as MutableSet<String>
+        set(value) = prefs.edit { putStringSet(EXPANDED_FOLDERS, value).apply() }
 
     var aboutClicked: Boolean
         get() = prefs.getBoolean(ABOUT_CLICKED, false)

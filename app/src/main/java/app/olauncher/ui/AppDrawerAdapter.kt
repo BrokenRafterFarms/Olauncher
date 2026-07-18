@@ -19,6 +19,7 @@ import app.olauncher.R
 import app.olauncher.data.AppModel
 import app.olauncher.data.Constants
 import app.olauncher.databinding.AdapterAppDrawerBinding
+import app.olauncher.databinding.AdapterFolderHeaderBinding
 import app.olauncher.databinding.AdapterPrivateSpaceHeaderBinding
 import app.olauncher.helper.hideKeyboard
 import app.olauncher.helper.isSystemApp
@@ -35,11 +36,15 @@ class AppDrawerAdapter(
     private val appRenameListener: (AppModel, String) -> Unit,
     private val privateSpaceToggleListener: () -> Unit = {},
     private val privateSpaceSettingsListener: () -> Unit = {},
+    private val folderToggleListener: (String) -> Unit = {},
+    private val folderSettingsListener: (String) -> Unit = {},
+    private val appFolderListener: (AppModel) -> Unit = {},
 ) : ListAdapter<AppModel, RecyclerView.ViewHolder>(DIFF_CALLBACK), Filterable {
 
     companion object {
         const val VIEW_TYPE_APP = 0
         const val VIEW_TYPE_PRIVATE_HEADER = 1
+        const val VIEW_TYPE_FOLDER_HEADER = 2
 
         val DIFF_CALLBACK = object : DiffUtil.ItemCallback<AppModel>() {
             override fun areItemsTheSame(oldItem: AppModel, newItem: AppModel): Boolean = when {
@@ -50,6 +55,9 @@ class AppDrawerAdapter(
                     oldItem.shortcutId == newItem.shortcutId && oldItem.user == newItem.user
 
                 oldItem is AppModel.PrivateSpaceHeader && newItem is AppModel.PrivateSpaceHeader -> true
+
+                oldItem is AppModel.FolderHeader && newItem is AppModel.FolderHeader ->
+                    oldItem.appLabel == newItem.appLabel
 
                 else -> false
             }
@@ -73,6 +81,7 @@ class AppDrawerAdapter(
     override fun getItemViewType(position: Int): Int {
         return when (appFilteredList.getOrNull(position)) {
             is AppModel.PrivateSpaceHeader -> VIEW_TYPE_PRIVATE_HEADER
+            is AppModel.FolderHeader -> VIEW_TYPE_FOLDER_HEADER
             else -> VIEW_TYPE_APP
         }
     }
@@ -81,6 +90,14 @@ class AppDrawerAdapter(
         return when (viewType) {
             VIEW_TYPE_PRIVATE_HEADER -> PrivateSpaceHeaderViewHolder(
                 AdapterPrivateSpaceHeaderBinding.inflate(
+                    LayoutInflater.from(parent.context),
+                    parent,
+                    false
+                )
+            )
+
+            VIEW_TYPE_FOLDER_HEADER -> FolderHeaderViewHolder(
+                AdapterFolderHeaderBinding.inflate(
                     LayoutInflater.from(parent.context),
                     parent,
                     false
@@ -110,6 +127,15 @@ class AppDrawerAdapter(
                     )
                 }
 
+                is FolderHeaderViewHolder -> {
+                    holder.bind(
+                        appLabelGravity,
+                        appModel.appLabel,
+                        folderToggleListener,
+                        folderSettingsListener,
+                    )
+                }
+
                 is ViewHolder -> holder.bind(
                     flag,
                     appLabelGravity,
@@ -119,7 +145,8 @@ class AppDrawerAdapter(
                     appDeleteListener,
                     appInfoListener,
                     appHideListener,
-                    appRenameListener
+                    appRenameListener,
+                    appFolderListener
                 )
             }
         } catch (e: Exception) {
@@ -166,6 +193,7 @@ class AppDrawerAdapter(
                 && flag == Constants.FLAG_LAUNCH_APP
                 && appFilteredList.isNotEmpty()
                 && appFilteredList[0] !is AppModel.PrivateSpaceHeader
+                && appFilteredList[0] !is AppModel.FolderHeader
             ) appClickListener(appFilteredList[0])
         } catch (e: Exception) {
             e.printStackTrace()
@@ -201,8 +229,26 @@ class AppDrawerAdapter(
     }
 
     fun launchFirstInList() {
-        val first = appFilteredList.firstOrNull { it !is AppModel.PrivateSpaceHeader }
+        val first = appFilteredList.firstOrNull { it !is AppModel.PrivateSpaceHeader && it !is AppModel.FolderHeader }
         if (first != null) appClickListener(first)
+    }
+
+    class FolderHeaderViewHolder(private val binding: AdapterFolderHeaderBinding) :
+        RecyclerView.ViewHolder(binding.root) {
+        fun bind(
+            appLabelGravity: Int,
+            folderName: String,
+            toggleListener: (String) -> Unit,
+            settingsListener: (String) -> Unit,
+        ) = with(binding) {
+            folderTitle.text = folderName
+            folderTitle.gravity = appLabelGravity
+            folderTitle.setOnClickListener { toggleListener(folderName) }
+            folderTitle.setOnLongClickListener {
+                settingsListener(folderName)
+                true
+            }
+        }
     }
 
     class PrivateSpaceHeaderViewHolder(private val binding: AdapterPrivateSpaceHeaderBinding) :
@@ -233,6 +279,7 @@ class AppDrawerAdapter(
             appInfoListener: (AppModel) -> Unit,
             appHideListener: (AppModel, Int) -> Unit,
             appRenameListener: (AppModel, String) -> Unit,
+            appFolderListener: (AppModel) -> Unit,
         ) = with(binding) {
             appHideLayout.visibility = View.GONE
             renameLayout.visibility = View.GONE
@@ -268,6 +315,7 @@ class AppDrawerAdapter(
                     appHideLayout.visibility = View.VISIBLE
                     // Only allow renaming non hidden apps
                     appRename.isVisible = flag != Constants.FLAG_HIDDEN_APPS
+                    appFolder.isVisible = flag == Constants.FLAG_LAUNCH_APP
                 }
                 true
             }
@@ -331,6 +379,7 @@ class AppDrawerAdapter(
             }
             appInfo.setOnClickListener { appInfoListener(appModel) }
             appDelete.setOnClickListener { appDeleteListener(appModel) }
+            appFolder.setOnClickListener { appFolderListener(appModel) }
             appMenuClose.setOnClickListener {
                 appHideLayout.visibility = View.GONE
                 appTitle.visibility = View.VISIBLE

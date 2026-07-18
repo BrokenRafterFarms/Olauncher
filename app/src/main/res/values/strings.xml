@@ -167,4 +167,10 @@
     <string name="cheers">Cheers!</string>
     <string name="notification_bar">Notification bar</string>
     <string name="private_space">Private space</string>
+    <string name="folder" translatable="false">Folder</string>
+    <string name="create_folder" translatable="false">Create folder</string>
+    <string name="add_to_folder" translatable="false">Add to folder</string>
+    <string name="remove_from_folder" translatable="false">Remove from folder</string>
+    <string name="delete_folder" translatable="false">Delete folder</string>
+    <string name="rename_folder" translatable="false">Rename folder</string>
 </resources>

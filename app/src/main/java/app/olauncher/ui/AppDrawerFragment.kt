@@ -11,7 +11,9 @@ import android.view.ViewGroup
 import android.view.animation.AnimationUtils
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SearchView
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
@@ -50,6 +52,8 @@ class AppDrawerFragment : Fragment() {
     private var currentPrivateSpaceApps: List<AppModel>? = null
     private var currentPrivateSpaceLocked: Boolean = true
     private var currentPrivateSpaceAvailable: Boolean = false
+    private var currentFolders: Map<String, List<String>>? = null
+    private var currentExpandedFolders: Set<String>? = null
 
     private val viewModel: MainViewModel by activityViewModels()
     private var _binding: FragmentAppDrawerBinding? = null
@@ -168,6 +172,7 @@ class AppDrawerFragment : Fragment() {
             appDeleteListener = { appModel ->
                 when (appModel) {
                     is AppModel.PrivateSpaceHeader -> {}
+                    is AppModel.FolderHeader -> {}
                     is AppModel.PinnedShortcut ->
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1) {
                             requireContext().deletePinnedShortcut(
@@ -233,7 +238,10 @@ class AppDrawerFragment : Fragment() {
             privateSpaceSettingsListener = {
                 viewModel.openPrivateSpaceSettings()
                 findNavController().popBackStack(R.id.mainFragment, false)
-            }
+            },
+            folderToggleListener = { viewModel.toggleFolder(it) },
+            folderSettingsListener = { showFolderSettingsDialog(it) },
+            appFolderListener = { showAppFolderDialog(it) }
         )
 
         linearLayoutManager = object : LinearLayoutManager(requireContext()) {
@@ -286,23 +294,125 @@ class AppDrawerFragment : Fragment() {
                     currentPrivateSpaceApps = it
                     updateCombinedAppList()
                 }
+                viewModel.folders.observe(viewLifecycleOwner) {
+                    currentFolders = it
+                    updateCombinedAppList()
+                }
+                viewModel.expandedFolders.observe(viewLifecycleOwner) {
+                    currentExpandedFolders = it
+                    updateCombinedAppList()
+                }
             }
         }
     }
 
     private fun updateCombinedAppList() {
         val apps = currentAppList ?: return
-        val combined = apps.toMutableList()
+        var combined = apps.toMutableList()
+        val query = binding.search.query
+
+        if (flag == Constants.FLAG_LAUNCH_APP && query.isNullOrBlank()) {
+            val folders = currentFolders
+            if (folders != null) {
+                val expanded = currentExpandedFolders ?: emptySet()
+                val appsInFolders = folders.values.flatten().toSet()
+
+                // Filter out apps that are in folders from the main list
+                combined = combined.filter { it !is AppModel.App || !appsInFolders.contains(it.appPackage) }.toMutableList()
+
+                // Add folders and their contents
+                folders.forEach { (name, pkgs) ->
+                    combined.add(
+                        AppModel.FolderHeader(
+                            appLabel = name,
+                            isExpanded = expanded.contains(name)
+                        )
+                    )
+                    if (expanded.contains(name)) {
+                        val folderApps = apps.filter { it is AppModel.App && pkgs.contains(it.appPackage) }
+                        combined.addAll(folderApps)
+                    }
+                }
+            }
+        }
 
         if (flag == Constants.FLAG_LAUNCH_APP && currentPrivateSpaceAvailable) {
             combined.add(AppModel.PrivateSpaceHeader(isLocked = currentPrivateSpaceLocked))
-            if (!currentPrivateSpaceLocked) {
+            if (!currentPrivateSpaceLocked || !query.isNullOrBlank()) {
                 currentPrivateSpaceApps?.let { combined.addAll(it) }
             }
         }
 
         adapter.setAppList(combined)
-        adapter.filter.filter(binding.search.query)
+        adapter.filter.filter(query)
+    }
+
+    private fun showFolderSettingsDialog(folderName: String) {
+        val options = arrayOf(
+            getString(R.string.rename_folder),
+            getString(R.string.delete_folder)
+        )
+        AlertDialog.Builder(requireContext())
+            .setTitle(folderName)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showRenameFolderDialog(folderName)
+                    1 -> viewModel.deleteFolder(folderName)
+                }
+            }
+            .show()
+    }
+
+    private fun showRenameFolderDialog(oldName: String) {
+        val input = EditText(requireContext())
+        input.setText(oldName)
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.rename_folder)
+            .setView(input)
+            .setPositiveButton(R.string.rename) { _, _ ->
+                val newName = input.text.toString().trim()
+                if (newName.isNotBlank()) {
+                    viewModel.renameFolder(oldName, newName)
+                }
+            }
+            .setNegativeButton(R.string.close, null)
+            .show()
+    }
+
+    private fun showAppFolderDialog(app: AppModel) {
+        val folders = viewModel.folders.value ?: emptyMap()
+        val folderNames = folders.keys.toList()
+        val options = mutableListOf<String>()
+        options.add(getString(R.string.create_folder))
+        options.addAll(folderNames)
+        options.add(getString(R.string.remove_from_folder))
+
+        AlertDialog.Builder(requireContext())
+            .setTitle(app.appLabel)
+            .setItems(options.toTypedArray()) { _, which ->
+                when (which) {
+                    0 -> showCreateFolderDialog(app)
+                    options.size - 1 -> viewModel.removeAppFromFolder(app.appPackage)
+                    else -> viewModel.addAppToFolder(options[which], app.appPackage)
+                }
+            }
+            .show()
+    }
+
+    private fun showCreateFolderDialog(app: AppModel) {
+        val input = EditText(requireContext())
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.create_folder)
+            .setView(input)
+            .setPositiveButton(R.string.folder) { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isNotBlank()) {
+                    viewModel.createFolder(name)
+                    viewModel.addAppToFolder(name, app.appPackage)
+                }
+            }
+            .setNegativeButton(R.string.close, null)
+            .show()
     }
 
     private fun initClickListeners() {

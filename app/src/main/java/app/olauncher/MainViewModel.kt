@@ -56,6 +56,104 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val privateSpaceLocked = MutableLiveData<Boolean>()
     val privateSpaceAvailable = MutableLiveData<Boolean>()
 
+    val folders = MutableLiveData<Map<String, List<String>>>()
+    val expandedFolders = MutableLiveData<Set<String>>()
+
+    init {
+        loadFolders()
+    }
+
+    private fun loadFolders() {
+        val folderSet = prefs.folders
+        val map = folderSet.associate { entry ->
+            val parts = entry.split(":")
+            val name = parts[0]
+            val pkgs = if (parts.size > 1) parts[1].split(",").filter { it.isNotBlank() } else emptyList()
+            name to pkgs
+        }
+        folders.value = map
+        expandedFolders.value = prefs.expandedFolders
+    }
+
+    fun createFolder(name: String) {
+        val current = folders.value?.toMutableMap() ?: mutableMapOf()
+        if (name.isNotBlank() && !current.containsKey(name)) {
+            current[name] = emptyList()
+            saveFolders(current)
+        }
+    }
+
+    fun renameFolder(oldName: String, newName: String) {
+        val current = folders.value?.toMutableMap() ?: mutableMapOf()
+        if (newName.isNotBlank() && current.containsKey(oldName) && !current.containsKey(newName)) {
+            val pkgs = current.remove(oldName) ?: emptyList()
+            current[newName] = pkgs
+            saveFolders(current)
+
+            val expanded = expandedFolders.value?.toMutableSet() ?: mutableSetOf()
+            if (expanded.remove(oldName)) {
+                expanded.add(newName)
+                expandedFolders.value = expanded
+                prefs.expandedFolders = expanded
+            }
+        }
+    }
+
+    fun deleteFolder(name: String) {
+        val current = folders.value?.toMutableMap() ?: mutableMapOf()
+        current.remove(name)
+        saveFolders(current)
+
+        val expanded = expandedFolders.value?.toMutableSet() ?: mutableSetOf()
+        if (expanded.remove(name)) {
+            expandedFolders.value = expanded
+            prefs.expandedFolders = expanded
+        }
+    }
+
+    fun addAppToFolder(folderName: String, pkg: String) {
+        val current = folders.value?.toMutableMap() ?: mutableMapOf()
+        // Remove app from any other folder first
+        current.forEach { (name, list) ->
+            if (list.contains(pkg)) {
+                current[name] = list.filter { it != pkg }
+            }
+        }
+        val list = current[folderName]?.toMutableList() ?: mutableListOf()
+        if (!list.contains(pkg)) {
+            list.add(pkg)
+            current[folderName] = list
+            saveFolders(current)
+        }
+    }
+
+    fun removeAppFromFolder(pkg: String) {
+        val current = folders.value?.toMutableMap() ?: mutableMapOf()
+        var changed = false
+        current.forEach { (name, list) ->
+            if (list.contains(pkg)) {
+                current[name] = list.filter { it != pkg }
+                changed = true
+            }
+        }
+        if (changed) {
+            saveFolders(current)
+        }
+    }
+
+    fun toggleFolder(name: String) {
+        val current = expandedFolders.value?.toMutableSet() ?: mutableSetOf()
+        if (current.contains(name)) current.remove(name) else current.add(name)
+        expandedFolders.value = current
+        prefs.expandedFolders = current
+    }
+
+    private fun saveFolders(map: Map<String, List<String>>) {
+        folders.value = map
+        val set = map.map { "${it.key}:${it.value.joinToString(",")}" }.toSet()
+        prefs.folders = set.toMutableSet()
+    }
+
     // Suppress backToHomeScreen during Private Space lock/unlock auth
     var isPrivateSpaceToggling = false
 
@@ -66,7 +164,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // val showRecentApps = SingleLiveEvent<Unit?>()
 
     fun selectedApp(appModel: AppModel, flag: Int) {
-        if (appModel is AppModel.PrivateSpaceHeader) return
+        if (appModel is AppModel.PrivateSpaceHeader || appModel is AppModel.FolderHeader) return
         when (flag) {
             Constants.FLAG_LAUNCH_APP -> {
                 when (appModel) {
@@ -114,7 +212,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun saveHomeApp(appModel: AppModel, position: Int) {
         when (appModel) {
-            is AppModel.PrivateSpaceHeader -> return
+            is AppModel.PrivateSpaceHeader, is AppModel.FolderHeader -> return
             is AppModel.App -> {
                 when (position) {
                     1 -> {
@@ -272,7 +370,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun saveSwipeApp(appModel: AppModel, isLeft: Boolean) {
         when (appModel) {
-            is AppModel.PrivateSpaceHeader -> return
+            is AppModel.PrivateSpaceHeader, is AppModel.FolderHeader -> return
             is AppModel.App -> {
                 if (isLeft) {
                     prefs.appNameSwipeLeft = appModel.appLabel
