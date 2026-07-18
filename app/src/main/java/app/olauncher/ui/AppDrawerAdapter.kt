@@ -2,6 +2,7 @@ package app.olauncher.ui
 
 import android.content.Context
 import android.content.pm.LauncherApps
+import android.os.Build
 import android.os.UserHandle
 import android.text.Editable
 import android.text.TextWatcher
@@ -75,6 +76,7 @@ class AppDrawerAdapter(
     private val appFilter = createAppFilter()
     private val myUserHandle = android.os.Process.myUserHandle()
 
+    var showIcons = false
     var appsList: MutableList<AppModel> = mutableListOf()
     var appFilteredList: MutableList<AppModel> = mutableListOf()
 
@@ -131,6 +133,7 @@ class AppDrawerAdapter(
                     holder.bind(
                         appLabelGravity,
                         appModel.appLabel,
+                        showIcons,
                         folderToggleListener,
                         folderSettingsListener,
                     )
@@ -141,6 +144,7 @@ class AppDrawerAdapter(
                     appLabelGravity,
                     myUserHandle,
                     appModel,
+                    showIcons,
                     appClickListener,
                     appDeleteListener,
                     appInfoListener,
@@ -238,6 +242,7 @@ class AppDrawerAdapter(
         fun bind(
             appLabelGravity: Int,
             folderName: String,
+            showIcons: Boolean,
             toggleListener: (String) -> Unit,
             settingsListener: (String) -> Unit,
         ) = with(binding) {
@@ -247,6 +252,20 @@ class AppDrawerAdapter(
             folderTitle.setOnLongClickListener {
                 settingsListener(folderName)
                 true
+            }
+
+            if (showIcons) {
+                val icon = root.context.getDrawable(R.drawable.ic_folder)
+                val size = (folderTitle.textSize * 1.1).toInt()
+                icon?.setBounds(0, 0, size, size)
+                if (appLabelGravity == android.view.Gravity.END) {
+                    folderTitle.setCompoundDrawablesRelative(null, null, icon, null)
+                } else {
+                    folderTitle.setCompoundDrawablesRelative(icon, null, null, null)
+                }
+                folderTitle.compoundDrawablePadding = (8 * root.context.resources.displayMetrics.density).toInt()
+            } else {
+                folderTitle.setCompoundDrawablesRelative(null, null, null, null)
             }
         }
     }
@@ -274,6 +293,7 @@ class AppDrawerAdapter(
             appLabelGravity: Int,
             myUserHandle: UserHandle,
             appModel: AppModel,
+            showIcons: Boolean,
             clickListener: (AppModel) -> Unit,
             appDeleteListener: (AppModel) -> Unit,
             appInfoListener: (AppModel) -> Unit,
@@ -292,6 +312,20 @@ class AppDrawerAdapter(
             }
             appTitle.gravity = appLabelGravity
             otherProfileIndicator.isVisible = appModel.user != myUserHandle
+
+            if (showIcons && appModel.appPackage.isNotBlank()) {
+                val icon = getAppIcon(root.context, appModel)
+                val size = (appTitle.textSize * 1.1).toInt()
+                icon?.setBounds(0, 0, size, size)
+                if (appLabelGravity == android.view.Gravity.END) {
+                    appTitle.setCompoundDrawablesRelative(null, null, icon, null)
+                } else {
+                    appTitle.setCompoundDrawablesRelative(icon, null, null, null)
+                }
+                appTitle.compoundDrawablePadding = (8 * root.context.resources.displayMetrics.density).toInt()
+            } else {
+                appTitle.setCompoundDrawablesRelative(null, null, null, null)
+            }
 
             appTitle.setOnClickListener { clickListener(appModel) }
 
@@ -405,6 +439,34 @@ class AppDrawerAdapter(
                 }
             } catch (_: Exception) {
                 "" // As a fallback, display an empty string.
+            }
+        }
+
+        private fun getAppIcon(context: Context, appModel: AppModel): android.graphics.drawable.Drawable? {
+            val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+            return try {
+                if (appModel is AppModel.PinnedShortcut && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1) {
+                    val query = LauncherApps.ShortcutQuery().apply {
+                        setPackage(appModel.appPackage)
+                        setShortcutIds(listOf(appModel.shortcutId))
+                        setQueryFlags(LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED)
+                    }
+                    val shortcuts = launcherApps.getShortcuts(query, appModel.user)
+                    if (shortcuts != null && shortcuts.isNotEmpty()) {
+                        launcherApps.getShortcutIconDrawable(shortcuts[0], context.resources.displayMetrics.densityDpi)
+                    } else {
+                        null
+                    }
+                } else {
+                    val activityList = launcherApps.getActivityList(appModel.appPackage, appModel.user)
+                    if (activityList.isNotEmpty()) {
+                        activityList.first().getIcon(0)
+                    } else {
+                        context.packageManager.getApplicationIcon(appModel.appPackage)
+                    }
+                }
+            } catch (_: Exception) {
+                null
             }
         }
     }

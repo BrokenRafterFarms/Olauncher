@@ -75,6 +75,7 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         binding.homeAppsNum.text = prefs.homeAppsNum.toString()
         populateProMessage()
         populateKeyboardText()
+        populateShowAppIcons()
         populateScreenTimeOnOff()
         populateLockSettings()
         // Home button for recents feature disabled
@@ -113,6 +114,7 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
 
         when (view.id) {
             R.id.olauncherHiddenApps -> showHiddenApps()
+            R.id.showAppIcons -> toggleShowAppIcons()
             R.id.moreFeatures -> viewModel.showDialog.postValue(Constants.Dialog.PRO_MESSAGE)
             R.id.screenTimeOnOff -> viewModel.showDialog.postValue(Constants.Dialog.DIGITAL_WELLBEING)
             R.id.appInfo -> openAppInfo(requireContext(), Process.myUserHandle(), BuildConfig.APPLICATION_ID)
@@ -217,6 +219,7 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         binding.aboutOlauncher.setOnClickListener(this)
         binding.moreFeatures.setOnClickListener(this)
         binding.autoShowKeyboard.setOnClickListener(this)
+        binding.showAppIcons?.setOnClickListener(this)
         binding.toggleLock.setOnClickListener(this)
         // Home button for recents feature disabled
         // binding.homeButtonRecents.setOnClickListener(this)
@@ -565,6 +568,16 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
     private fun populateKeyboardText() {
         if (prefs.autoShowKeyboard) binding.autoShowKeyboard.text = getString(R.string.on)
         else binding.autoShowKeyboard.text = getString(R.string.off)
+    }
+
+    private fun populateShowAppIcons() {
+        if (prefs.showAppIcons) binding.showAppIcons?.text = getString(R.string.on)
+        else binding.showAppIcons?.text = getString(R.string.off)
+    }
+
+    private fun toggleShowAppIcons() {
+        viewModel.updateShowAppIcons(!prefs.showAppIcons)
+        populateShowAppIcons()
     }
 
     private fun populateWallpaperText() {

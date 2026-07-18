@@ -44,6 +44,7 @@ class Prefs(context: Context) {
     private val SHOWN_ON_DAY_OF_YEAR = "SHOWN_ON_DAY_OF_YEAR"
     private val FOLDERS = "FOLDERS"
     private val EXPANDED_FOLDERS = "EXPANDED_FOLDERS"
+    private val SHOW_APP_ICONS = "SHOW_APP_ICONS"
     // Home button for recents feature disabled
     // private val HOME_BUTTON_SHOW_RECENTS = "HOME_BUTTON_SHOW_RECENTS"
 
@@ -246,6 +247,10 @@ class Prefs(context: Context) {
     var expandedFolders: MutableSet<String>
         get() = prefs.getStringSet(EXPANDED_FOLDERS, mutableSetOf()) as MutableSet<String>
         set(value) = prefs.edit { putStringSet(EXPANDED_FOLDERS, value).apply() }
+
+    var showAppIcons: Boolean
+        get() = prefs.getBoolean(SHOW_APP_ICONS, false)
+        set(value) = prefs.edit { putBoolean(SHOW_APP_ICONS, value).apply() }
 
     var aboutClicked: Boolean
         get() = prefs.getBoolean(ABOUT_CLICKED, false)

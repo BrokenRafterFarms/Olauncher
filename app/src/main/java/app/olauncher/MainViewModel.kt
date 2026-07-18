@@ -58,6 +58,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val folders = MutableLiveData<Map<String, List<String>>>()
     val expandedFolders = MutableLiveData<Set<String>>()
+    val showAppIcons = MutableLiveData(prefs.showAppIcons)
 
     init {
         loadFolders()
@@ -529,6 +530,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateHomeAlignment(gravity: Int) {
         prefs.homeAlignment = gravity
         homeAppAlignment.value = prefs.homeAlignment
+    }
+
+    fun updateShowAppIcons(enabled: Boolean) {
+        prefs.showAppIcons = enabled
+        showAppIcons.postValue(enabled)
     }
 
     fun getTodaysScreenTime() {

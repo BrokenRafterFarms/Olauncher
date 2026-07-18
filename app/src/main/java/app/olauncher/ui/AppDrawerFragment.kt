@@ -268,6 +268,10 @@ class AppDrawerFragment : Fragment() {
     }
 
     private fun initObservers() {
+        viewModel.showAppIcons.observe(viewLifecycleOwner) {
+            adapter.showIcons = it
+            adapter.notifyDataSetChanged()
+        }
         viewModel.firstOpen.observe(viewLifecycleOwner) {
         }
         if (flag == Constants.FLAG_HIDDEN_APPS) {

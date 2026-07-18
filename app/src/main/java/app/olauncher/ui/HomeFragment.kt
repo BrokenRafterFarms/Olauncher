@@ -8,6 +8,7 @@ import android.content.res.Configuration
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
+import android.os.UserHandle
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -202,6 +203,9 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         viewModel.toggleDateTime.observe(viewLifecycleOwner) {
             populateDateTime()
         }
+        viewModel.showAppIcons.observe(viewLifecycleOwner) {
+            populateHomeScreen(false)
+        }
         viewModel.screenTimeValue.observe(viewLifecycleOwner) {
             it?.let { binding.tvScreenTime.text = it }
         }
@@ -305,59 +309,60 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             populateScreenTime()
 
         val homeAppsNum = prefs.homeAppsNum
+        val showIcons = prefs.showAppIcons
         if (homeAppsNum == 0) return
 
         binding.homeApp1.visibility = View.VISIBLE
-        if (!setHomeAppText(binding.homeApp1, prefs.appName1, prefs.appPackage1, prefs.appUser1, prefs.isShortcut1, prefs.shortcutId1)) {
+        if (!setHomeAppText(binding.homeApp1, prefs.appName1, prefs.appPackage1, prefs.appUser1, prefs.isShortcut1, prefs.shortcutId1, showIcons)) {
             prefs.appName1 = ""
             prefs.appPackage1 = ""
         }
         if (homeAppsNum == 1) return
 
         binding.homeApp2.visibility = View.VISIBLE
-        if (!setHomeAppText(binding.homeApp2, prefs.appName2, prefs.appPackage2, prefs.appUser2, prefs.isShortcut2, prefs.shortcutId2)) {
+        if (!setHomeAppText(binding.homeApp2, prefs.appName2, prefs.appPackage2, prefs.appUser2, prefs.isShortcut2, prefs.shortcutId2, showIcons)) {
             prefs.appName2 = ""
             prefs.appPackage2 = ""
         }
         if (homeAppsNum == 2) return
 
         binding.homeApp3.visibility = View.VISIBLE
-        if (!setHomeAppText(binding.homeApp3, prefs.appName3, prefs.appPackage3, prefs.appUser3, prefs.isShortcut3, prefs.shortcutId3)) {
+        if (!setHomeAppText(binding.homeApp3, prefs.appName3, prefs.appPackage3, prefs.appUser3, prefs.isShortcut3, prefs.shortcutId3, showIcons)) {
             prefs.appName3 = ""
             prefs.appPackage3 = ""
         }
         if (homeAppsNum == 3) return
 
         binding.homeApp4.visibility = View.VISIBLE
-        if (!setHomeAppText(binding.homeApp4, prefs.appName4, prefs.appPackage4, prefs.appUser4, prefs.isShortcut4, prefs.shortcutId4)) {
+        if (!setHomeAppText(binding.homeApp4, prefs.appName4, prefs.appPackage4, prefs.appUser4, prefs.isShortcut4, prefs.shortcutId4, showIcons)) {
             prefs.appName4 = ""
             prefs.appPackage4 = ""
         }
         if (homeAppsNum == 4) return
 
         binding.homeApp5.visibility = View.VISIBLE
-        if (!setHomeAppText(binding.homeApp5, prefs.appName5, prefs.appPackage5, prefs.appUser5, prefs.isShortcut5, prefs.shortcutId5)) {
+        if (!setHomeAppText(binding.homeApp5, prefs.appName5, prefs.appPackage5, prefs.appUser5, prefs.isShortcut5, prefs.shortcutId5, showIcons)) {
             prefs.appName5 = ""
             prefs.appPackage5 = ""
         }
         if (homeAppsNum == 5) return
 
         binding.homeApp6.visibility = View.VISIBLE
-        if (!setHomeAppText(binding.homeApp6, prefs.appName6, prefs.appPackage6, prefs.appUser6, prefs.isShortcut6, prefs.shortcutId6)) {
+        if (!setHomeAppText(binding.homeApp6, prefs.appName6, prefs.appPackage6, prefs.appUser6, prefs.isShortcut6, prefs.shortcutId6, showIcons)) {
             prefs.appName6 = ""
             prefs.appPackage6 = ""
         }
         if (homeAppsNum == 6) return
 
         binding.homeApp7.visibility = View.VISIBLE
-        if (!setHomeAppText(binding.homeApp7, prefs.appName7, prefs.appPackage7, prefs.appUser7, prefs.isShortcut7, prefs.shortcutId7)) {
+        if (!setHomeAppText(binding.homeApp7, prefs.appName7, prefs.appPackage7, prefs.appUser7, prefs.isShortcut7, prefs.shortcutId7, showIcons)) {
             prefs.appName7 = ""
             prefs.appPackage7 = ""
         }
         if (homeAppsNum == 7) return
 
         binding.homeApp8.visibility = View.VISIBLE
-        if (!setHomeAppText(binding.homeApp8, prefs.appName8, prefs.appPackage8, prefs.appUser8, prefs.isShortcut8, prefs.shortcutId8)) {
+        if (!setHomeAppText(binding.homeApp8, prefs.appName8, prefs.appPackage8, prefs.appUser8, prefs.isShortcut8, prefs.shortcutId8, showIcons)) {
             prefs.appName8 = ""
             prefs.appPackage8 = ""
         }
@@ -370,6 +375,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         userString: String,
         isShortcut: Boolean,
         shortcutId: String?,
+        showIcons: Boolean = false,
     ): Boolean {
         // Get user handle for the app/shortcut
         val userHandle = getUserHandleFromString(requireContext(), userString)
@@ -387,8 +393,17 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             try {
                 val shortcuts = launcherApps.getShortcuts(query, userHandle)
                 // Check if our shortcut still exists
-                if (shortcuts?.any { it.id == shortcutId } == true) {
+                val shortcut = shortcuts?.find { it.id == shortcutId }
+                if (shortcut != null) {
                     textView.text = appName
+                    if (showIcons) {
+                        val icon = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1) {
+                            launcherApps.getShortcutIconDrawable(shortcut, requireContext().resources.displayMetrics.densityDpi)
+                        } else null
+                        setCompoundDrawable(textView, icon)
+                    } else {
+                        textView.setCompoundDrawablesRelative(null, null, null, null)
+                    }
                     return true
                 }
                 textView.text = ""
@@ -403,10 +418,41 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         // Regular app check
         if (isPackageInstalled(requireContext(), packageName, userString)) {
             textView.text = appName
+            if (showIcons) {
+                val icon = getAppIcon(requireContext(), packageName, userHandle)
+                setCompoundDrawable(textView, icon)
+            } else {
+                textView.setCompoundDrawablesRelative(null, null, null, null)
+            }
             return true
         }
         textView.text = ""
         return false
+    }
+
+    private fun setCompoundDrawable(textView: TextView, icon: android.graphics.drawable.Drawable?) {
+        val size = (textView.textSize * 1.1).toInt()
+        icon?.setBounds(0, 0, size, size)
+        if (prefs.homeAlignment == Gravity.END) {
+            textView.setCompoundDrawablesRelative(null, null, icon, null)
+        } else {
+            textView.setCompoundDrawablesRelative(icon, null, null, null)
+        }
+        textView.compoundDrawablePadding = (8 * requireContext().resources.displayMetrics.density).toInt()
+    }
+
+    private fun getAppIcon(context: Context, packageName: String, user: UserHandle): android.graphics.drawable.Drawable? {
+        val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+        return try {
+            val activityList = launcherApps.getActivityList(packageName, user)
+            if (activityList.isNotEmpty()) {
+                activityList.first().getIcon(0)
+            } else {
+                context.packageManager.getApplicationIcon(packageName)
+            }
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private fun hideHomeApps() {
