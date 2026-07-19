@@ -242,7 +242,7 @@ class Prefs(context: Context) {
 
     var folders: MutableSet<String>
         get() = prefs.getStringSet(FOLDERS, mutableSetOf()) as MutableSet<String>
-        set(value) = prefs.edit { putStringSet(FOLDERS, value).apply() }
+        set(value) = prefs.edit(commit = true) { putStringSet(FOLDERS, value) }
 
     var expandedFolders: MutableSet<String>
         get() = prefs.getStringSet(EXPANDED_FOLDERS, mutableSetOf()) as MutableSet<String>

@@ -37,6 +37,7 @@ import app.olauncher.helper.openUrl
 import app.olauncher.helper.showKeyboard
 import app.olauncher.helper.showToast
 import app.olauncher.helper.uninstall
+import androidx.activity.OnBackPressedCallback
 
 class AppDrawerFragment : Fragment() {
 
@@ -54,6 +55,7 @@ class AppDrawerFragment : Fragment() {
     private var currentPrivateSpaceAvailable: Boolean = false
     private var currentFolders: Map<String, List<String>>? = null
     private var currentExpandedFolders: Set<String>? = null
+    private var currentFolderPath = mutableListOf<String>()
 
     private val viewModel: MainViewModel by activityViewModels()
     private var _binding: FragmentAppDrawerBinding? = null
@@ -94,6 +96,27 @@ class AppDrawerFragment : Fragment() {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+
+        _binding?.folderBack?.setOnClickListener {
+            if (currentFolderPath.isNotEmpty()) {
+                currentFolderPath.removeAt(currentFolderPath.size - 1)
+                updateCombinedAppList()
+            }
+        }
+
+        requireActivity().onBackPressedDispatcher.addCallback(
+            viewLifecycleOwner,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    if (currentFolderPath.isNotEmpty()) {
+                        currentFolderPath.removeAt(currentFolderPath.size - 1)
+                        updateCombinedAppList()
+                    } else {
+                        isEnabled = false
+                        requireActivity().onBackPressedDispatcher.onBackPressed()
+                    }
+                }
+            })
     }
 
     private fun initSearch() {
@@ -239,7 +262,10 @@ class AppDrawerFragment : Fragment() {
                 viewModel.openPrivateSpaceSettings()
                 findNavController().popBackStack(R.id.mainFragment, false)
             },
-            folderToggleListener = { viewModel.toggleFolder(it) },
+            folderToggleListener = { folderName ->
+                currentFolderPath.add(folderName)
+                updateCombinedAppList()
+            },
             folderSettingsListener = { showFolderSettingsDialog(it) },
             appFolderListener = { showAppFolderDialog(it) }
         )
@@ -312,35 +338,90 @@ class AppDrawerFragment : Fragment() {
 
     private fun updateCombinedAppList() {
         val apps = currentAppList ?: return
-        var combined = apps.toMutableList()
+        var combined = mutableListOf<AppModel>()
         val query = binding.search.query
 
-        if (flag == Constants.FLAG_LAUNCH_APP && query.isNullOrBlank()) {
-            val folders = currentFolders
-            if (folders != null) {
-                val expanded = currentExpandedFolders ?: emptySet()
-                val appsInFolders = folders.values.flatten().toSet()
-
-                // Filter out apps that are in folders from the main list
-                combined = combined.filter { it !is AppModel.App || !appsInFolders.contains(it.appPackage) }.toMutableList()
-
-                // Add folders and their contents
-                folders.forEach { (name, pkgs) ->
-                    combined.add(
-                        AppModel.FolderHeader(
-                            appLabel = name,
-                            isExpanded = expanded.contains(name)
-                        )
-                    )
-                    if (expanded.contains(name)) {
-                        val folderApps = apps.filter { it is AppModel.App && pkgs.contains(it.appPackage) }
-                        combined.addAll(folderApps)
-                    }
-                }
-            }
+        val folders = currentFolders ?: emptyMap()
+        val currentFolder = currentFolderPath.lastOrNull()
+        
+        // Update Folder Header UI
+        if (currentFolder != null) {
+            _binding?.folderHeaderLayout?.visibility = View.VISIBLE
+            _binding?.folderName?.text = currentFolder
+        } else {
+            _binding?.folderHeaderLayout?.visibility = View.GONE
         }
 
-        if (flag == Constants.FLAG_LAUNCH_APP && currentPrivateSpaceAvailable) {
+        if (flag == Constants.FLAG_LAUNCH_APP) {
+            if (!query.isNullOrBlank()) {
+                // Global search from root, or scoped search within folder
+                if (currentFolder == null) {
+                    // Global search: include all apps, ignore folders
+                    combined.addAll(apps.filter { it is AppModel.App })
+                } else {
+                    // Scoped search: apps in this folder or its subfolders
+                    val allAppsInFolder = getAllItemsInFolder(currentFolder, folders)
+                        .filter { it.startsWith("pkg:") }
+                        .map { it.removePrefix("pkg:") }
+                        .toSet()
+                    combined.addAll(apps.filter { it is AppModel.App && allAppsInFolder.contains(it.appPackage) })
+                }
+            } else {
+                // No search query: show items in current folder or root items
+                val itemsToShow = if (currentFolder == null) {
+                    // Root items: apps/folders NOT in any other folder
+                    val allItemsInAnyFolder = folders.values.flatten().toSet()
+                    val appsInRoot = apps.filter { 
+                        (it is AppModel.App || it is AppModel.PinnedShortcut) && 
+                        !allItemsInAnyFolder.contains("pkg:${it.appPackage}") 
+                    }
+                    val foldersInRoot = folders.keys.filter { folderName ->
+                        !allItemsInAnyFolder.contains("folder:$folderName")
+                    }
+                    
+                    val list = mutableListOf<AppModel>()
+                    list.addAll(appsInRoot)
+                    list.addAll(foldersInRoot.map { AppModel.FolderHeader(it, false) })
+                    // Alphabetical sorting
+                    list.sortBy { it.appLabel.lowercase() }
+                    list
+                } else {
+                    // Items in current folder
+                    val items = folders[currentFolder] ?: emptyList()
+                    val list = mutableListOf<AppModel>()
+                    items.forEach { item ->
+                        if (item.startsWith("pkg:")) {
+                            val pkg = item.removePrefix("pkg:")
+                            // Include all apps/shortcuts for this package to avoid missing items
+                            list.addAll(apps.filter { (it is AppModel.App || it is AppModel.PinnedShortcut) && it.appPackage == pkg })
+                        } else if (item.startsWith("folder:")) {
+                            val folderName = item.removePrefix("folder:")
+                            list.add(AppModel.FolderHeader(folderName, false))
+                        }
+                    }
+                    // Alphabetical sorting
+                    list.sortBy { it.appLabel.lowercase() }
+                    list
+                }
+                combined.addAll(itemsToShow)
+            }
+        } else {
+            // Other flags (Hidden, Home apps)
+            combined.addAll(apps)
+            combined.sortBy { it.appLabel.lowercase() }
+        }
+        
+        // Final safeguard against duplicates
+        combined = combined.distinctBy { 
+            when (it) {
+                is AppModel.App -> "pkg:${it.appPackage}|${it.user}"
+                is AppModel.PinnedShortcut -> "shortcut:${it.shortcutId}|${it.user}"
+                is AppModel.FolderHeader -> "folder:${it.appLabel}"
+                else -> it.toString()
+            }
+        }.toMutableList()
+
+        if (flag == Constants.FLAG_LAUNCH_APP && currentPrivateSpaceAvailable && currentFolder == null) {
             combined.add(AppModel.PrivateSpaceHeader(isLocked = currentPrivateSpaceLocked))
             if (!currentPrivateSpaceLocked || !query.isNullOrBlank()) {
                 currentPrivateSpaceApps?.let { combined.addAll(it) }
@@ -351,18 +432,64 @@ class AppDrawerFragment : Fragment() {
         adapter.filter.filter(query)
     }
 
+    private fun getAllItemsInFolder(folderName: String, folders: Map<String, List<String>>): Set<String> {
+        val result = mutableSetOf<String>()
+        val items = folders[folderName] ?: return result
+        result.addAll(items)
+        items.forEach { item ->
+            if (item.startsWith("folder:")) {
+                result.addAll(getAllItemsInFolder(item.removePrefix("folder:"), folders))
+            }
+        }
+        return result
+    }
+
     private fun showFolderSettingsDialog(folderName: String) {
-        val options = arrayOf(
-            getString(R.string.rename_folder),
-            getString(R.string.delete_folder)
-        )
+        val folders = viewModel.folders.value ?: emptyMap()
+        val allItemsInAnyFolder = folders.values.flatten().toSet()
+        val isNested = allItemsInAnyFolder.contains("folder:$folderName")
+        
+        val options = mutableListOf<String>()
+        options.add(getString(R.string.rename_folder))
+        options.add(getString(R.string.delete_folder))
+        
+        if (isNested) {
+            options.add("Remove from parent folder")
+        } else {
+            options.add("Move to folder")
+        }
+
         AlertDialog.Builder(requireContext())
             .setTitle(folderName)
-            .setItems(options) { _, which ->
+            .setItems(options.toTypedArray()) { _, which ->
                 when (which) {
                     0 -> showRenameFolderDialog(folderName)
                     1 -> viewModel.deleteFolder(folderName)
+                    2 -> {
+                        if (isNested) {
+                            viewModel.removeFolderFromParent(folderName)
+                        } else {
+                            showMoveFolderDialog(folderName)
+                        }
+                    }
                 }
+            }
+            .show()
+    }
+
+    private fun showMoveFolderDialog(folderToMove: String) {
+        val folders = viewModel.folders.value ?: emptyMap()
+        val otherFolders = folders.keys.filter { it != folderToMove }.toList()
+        
+        if (otherFolders.isEmpty()) {
+            requireContext().showToast("No other folders available")
+            return
+        }
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("Move '$folderToMove' to:")
+            .setItems(otherFolders.toTypedArray()) { _, which ->
+                viewModel.addFolderToFolder(otherFolders[which], folderToMove)
             }
             .show()
     }
@@ -479,6 +606,14 @@ class AppDrawerFragment : Fragment() {
         super.onStart()
         cachedIsCjkKeyboard = null
         binding.search.showKeyboard(prefs.autoShowKeyboard)
+        
+        // Reset navigation to root and refresh list on re-entry
+        currentFolderPath.clear()
+        viewModel.getAppList(true)
+        if (flag == Constants.FLAG_LAUNCH_APP) {
+            viewModel.getPrivateSpaceAppList()
+        }
+        updateCombinedAppList()
     }
 
     override fun onStop() {

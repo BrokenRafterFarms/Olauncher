@@ -69,11 +69,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val map = folderSet.associate { entry ->
             val parts = entry.split(":")
             val name = parts[0]
-            val pkgs = if (parts.size > 1) parts[1].split(",").filter { it.isNotBlank() } else emptyList()
-            name to pkgs
+            val items = if (parts.size > 1) parts[1].split(",").filter { it.isNotBlank() } else emptyList()
+            // Migration: if items don't have prefix, assume they are packages
+            val prefixedItems = items.map { if (it.startsWith("pkg:") || it.startsWith("folder:")) it else "pkg:$it" }
+            name to prefixedItems
         }
         folders.value = map
-        expandedFolders.value = prefs.expandedFolders
     }
 
     fun createFolder(name: String) {
@@ -87,53 +88,77 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun renameFolder(oldName: String, newName: String) {
         val current = folders.value?.toMutableMap() ?: mutableMapOf()
         if (newName.isNotBlank() && current.containsKey(oldName) && !current.containsKey(newName)) {
-            val pkgs = current.remove(oldName) ?: emptyList()
-            current[newName] = pkgs
-            saveFolders(current)
-
-            val expanded = expandedFolders.value?.toMutableSet() ?: mutableSetOf()
-            if (expanded.remove(oldName)) {
-                expanded.add(newName)
-                expandedFolders.value = expanded
-                prefs.expandedFolders = expanded
+            val items = current.remove(oldName) ?: emptyList()
+            current[newName] = items
+            
+            // Update references to this folder in other folders
+            current.forEach { (name, list) ->
+                if (list.contains("folder:$oldName")) {
+                    current[name] = list.map { if (it == "folder:$oldName") "folder:$newName" else it }
+                }
             }
+            saveFolders(current)
         }
     }
 
     fun deleteFolder(name: String) {
         val current = folders.value?.toMutableMap() ?: mutableMapOf()
         current.remove(name)
-        saveFolders(current)
-
-        val expanded = expandedFolders.value?.toMutableSet() ?: mutableSetOf()
-        if (expanded.remove(name)) {
-            expandedFolders.value = expanded
-            prefs.expandedFolders = expanded
+        // Remove references to this folder
+        current.forEach { (fName, list) ->
+            if (list.contains("folder:$name")) {
+                current[fName] = list.filter { it != "folder:$name" }
+            }
         }
+        saveFolders(current)
     }
 
     fun addAppToFolder(folderName: String, pkg: String) {
         val current = folders.value?.toMutableMap() ?: mutableMapOf()
+        val prefixedPkg = "pkg:$pkg"
         // Remove app from any other folder first
         current.forEach { (name, list) ->
-            if (list.contains(pkg)) {
-                current[name] = list.filter { it != pkg }
+            if (list.contains(prefixedPkg)) {
+                current[name] = list.filter { it != prefixedPkg }
             }
         }
         val list = current[folderName]?.toMutableList() ?: mutableListOf()
-        if (!list.contains(pkg)) {
-            list.add(pkg)
+        if (!list.contains(prefixedPkg)) {
+            list.add(prefixedPkg)
             current[folderName] = list
+            saveFolders(current)
+        }
+    }
+
+    fun addFolderToFolder(parentFolder: String, childFolder: String) {
+        val current = folders.value?.toMutableMap() ?: mutableMapOf()
+        val prefixedChild = "folder:$childFolder"
+        
+        // Prevent circular reference
+        if (parentFolder == childFolder) return
+
+        // Remove from any other folder first
+        current.forEach { (name, list) ->
+            if (list.contains(prefixedChild)) {
+                current[name] = list.filter { it != prefixedChild }
+            }
+        }
+
+        val list = current[parentFolder]?.toMutableList() ?: mutableListOf()
+        if (!list.contains(prefixedChild)) {
+            list.add(prefixedChild)
+            current[parentFolder] = list
             saveFolders(current)
         }
     }
 
     fun removeAppFromFolder(pkg: String) {
         val current = folders.value?.toMutableMap() ?: mutableMapOf()
+        val prefixedPkg = "pkg:$pkg"
         var changed = false
         current.forEach { (name, list) ->
-            if (list.contains(pkg)) {
-                current[name] = list.filter { it != pkg }
+            if (list.contains(prefixedPkg)) {
+                current[name] = list.filter { it != prefixedPkg }
                 changed = true
             }
         }
@@ -142,11 +167,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun toggleFolder(name: String) {
-        val current = expandedFolders.value?.toMutableSet() ?: mutableSetOf()
-        if (current.contains(name)) current.remove(name) else current.add(name)
-        expandedFolders.value = current
-        prefs.expandedFolders = current
+    fun removeFolderFromParent(folderName: String) {
+        val current = folders.value?.toMutableMap() ?: mutableMapOf()
+        val prefixedFolder = "folder:$folderName"
+        var changed = false
+        current.forEach { (name, list) ->
+            if (list.contains(prefixedFolder)) {
+                current[name] = list.filter { it != prefixedFolder }
+                changed = true
+            }
+        }
+        if (changed) {
+            saveFolders(current)
+        }
     }
 
     private fun saveFolders(map: Map<String, List<String>>) {
