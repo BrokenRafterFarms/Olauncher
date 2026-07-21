@@ -1,16 +1,12 @@
 package app.olauncher.ui
 
-import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
-import android.text.Spannable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AnimationUtils
-import android.view.inputmethod.BaseInputConnection
-import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
@@ -45,7 +41,6 @@ class AppDrawerFragment : Fragment() {
     private lateinit var adapter: AppDrawerAdapter
     private lateinit var linearLayoutManager: LinearLayoutManager
     private var searchTextView: TextView? = null
-    private var cachedIsCjkKeyboard: Boolean? = null
 
     private var flag = Constants.FLAG_LAUNCH_APP
     private var canRename = false
@@ -133,7 +128,6 @@ class AppDrawerFragment : Fragment() {
 
             override fun onQueryTextChange(newText: String): Boolean {
                 try {
-                    adapter.allowAutoLaunch = !isSearchComposing()
                     adapter.filter.filter(newText)
                     binding.appRename.visibility =
                         if (canRename && newText.isNotBlank()) View.VISIBLE else View.GONE
@@ -144,33 +138,6 @@ class AppDrawerFragment : Fragment() {
                 return false
             }
         })
-    }
-
-    private fun isSearchComposing(): Boolean {
-        val text = searchTextView?.text
-        if (text !is Spannable) return false
-        val start = BaseInputConnection.getComposingSpanStart(text)
-        val end = BaseInputConnection.getComposingSpanEnd(text)
-        if (start !in 0 until end) return false
-        return isCjkKeyboard()
-    }
-
-    private fun isCjkKeyboard(): Boolean {
-        cachedIsCjkKeyboard?.let { return it }
-        val result = try {
-            val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-            val subtype = imm.currentInputMethodSubtype
-            val language = when {
-                subtype == null -> ""
-                subtype.languageTag.isNotEmpty() -> subtype.languageTag // e.g. "zh-CN", "ja-JP", "en-US"
-                else -> subtype.locale // deprecated fallback, e.g. "zh_CN"
-            }
-            language.startsWith("zh") || language.startsWith("ja") || language.startsWith("ko")
-        } catch (e: Exception) {
-            false
-        }
-        cachedIsCjkKeyboard = result
-        return result
     }
 
     private fun initAdapter() {
@@ -604,12 +571,18 @@ class AppDrawerFragment : Fragment() {
 
     override fun onStart() {
         super.onStart()
-        cachedIsCjkKeyboard = null
         binding.search.showKeyboard(prefs.autoShowKeyboard)
         
         // Reset navigation to root and refresh list on re-entry
         currentFolderPath.clear()
-        viewModel.getAppList(true)
+        
+        if (flag == Constants.FLAG_HIDDEN_APPS) {
+            viewModel.getHiddenApps()
+        } else {
+            val includeHidden = flag != Constants.FLAG_LAUNCH_APP
+            viewModel.getAppList(includeHidden)
+        }
+
         if (flag == Constants.FLAG_LAUNCH_APP) {
             viewModel.getPrivateSpaceAppList()
         }

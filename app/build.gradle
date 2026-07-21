@@ -1,5 +1,6 @@
-apply plugin: 'com.android.application'
-apply plugin: 'kotlin-android'
+plugins {
+    alias(libs.plugins.android.application)
+}
 
 android {
     compileSdk 35
@@ -9,9 +10,8 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
-    }
+    // AGP 9.0+ built-in Kotlin support handles jvmTarget automatically
+    // based on targetCompatibility.
 
     defaultConfig {
         applicationId "app.olauncher"

@@ -67,7 +67,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadFolders() {
         val folderSet = prefs.folders
         val map = folderSet.associate { entry ->
-            val parts = entry.split(":")
+            val parts = entry.split(":", limit = 2)
             val name = parts[0]
             val items = if (parts.size > 1) parts[1].split(",").filter { it.isNotBlank() } else emptyList()
             // Migration: if items don't have prefix, assume they are packages

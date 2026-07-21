@@ -1,0 +1,6 @@
+- [x] Remove `android.defaults.buildfeatures.buildconfig` from `gradle.properties`
+- [x] Update AGP version to `9.3.0` in `gradle/libs.versions.toml`
+- [x] Update Gradle version to `9.6.1` in `gradle/wrapper/gradle-wrapper.properties`
+- [x] Sync project with Gradle
+- [x] Verify build with `./gradlew assembleDebug`
+- [x] Resolve AGP 9.0+ built-in Kotlin conflict

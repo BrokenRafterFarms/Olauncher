@@ -1,0 +1,8 @@
+- [x] Remove auto-launch logic from `AppDrawerAdapter.kt`
+- [x] Remove auto-launch logic and helper functions from `AppDrawerFragment.kt`
+- [x] Verify auto-launch changes (syntax check)
+- [x] Fix folder content persistence in `MainViewModel.kt`
+- [x] Verify persistence fix
+- [x] Fix hidden apps migration logic in `Utils.kt`
+- [x] Update hidden apps loading in `AppDrawerFragment.kt`
+- [x] Verify hidden apps fixes
